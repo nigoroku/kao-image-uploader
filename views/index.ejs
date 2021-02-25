@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+
+    <!-- Meta, title, CSS, favicons, etc. -->
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>花王　画像検索フォーム</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-beta/css/materialize.min.css">
+    <link rel="stylesheet" type="text/css" href="vender/dropify/dist/css/dropify.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        html {
+            height: 100%;
+            width:100%;
+        }
+        body {
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-image: url(./image/background.png);
+            font-family: "游ゴシック体", YuGothic, "游ゴシック", "Yu Gothic", "メイリオ", sans-serif;
+            font-weight: 500;
+            height: 100%;
+            width:100%;
+        }
+        .logo {
+            width: 85px;
+            margin-bottom: 10px;
+            vertical-align: middle;
+        }
+        .transparent-nav {
+            background-color: #ffffffe3 !important;
+        }
+        .dropify-wrapper {
+            height:400px;
+            font-size: 20px;
+        }
+        .dropify-wrapper .dropify-message span.file-icon {
+            font-size: 80px;
+        }
+        #progress-container {
+            margin: 20px;
+            width: 400px;
+            height: 5px;
+        }
+        #progress-wrap {
+            display: none;
+            z-index: 999;
+            position: fixed;
+            top: 0;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background: #ffffffd4;
+        }
+        #analyze-result {
+            display: none;
+        }
+        #analyze-result label {
+            color: rgb(32, 32, 32);
+            font-size: 16px;
+        }
+        #analyze-result span {
+            color: rgb(32, 32, 32);
+            font-size: 20px;
+        }
+        #modal1 {
+            z-index:9999;
+            text-align: center;
+            height: 600px;
+            padding-top: 30px;
+        }
+        #item-img {
+            margin-top: 15px;
+            max-width: 350px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="transparent-nav" role="navigation">
+        <div class="nav-wrapper container"><a id="logo-container" href="/" class="brand-logo white-text"><img class="logo" src="./image/logo.png" alt="kao"></a>
+            <a href="#" data-target="nav-mobile" class="sidenav-trigger"><i class="material-icons">menu</i></a>
+        </div>
+    </nav>
+    <div class="section no-pad-bot" id="index-banner">
+        <div class="container">
+            <h1 class="header center white-text"><i class="large material-icons" style="vertical-align: middle;">image</i><span style="vertical-align: middle;">Q＆A Search</span></h1>
+            <div class="row center">
+                <p class="header col s12  white-text light">
+                    商品画像から対象商品のQ&Aを検索することができます。
+                    <br>
+                    以下のフォームに画像をドラッグ＆ドロップして、画像をアップロードしてください。
+                    <br>
+                </p>
+            </div>
+
+            <form action="/search" method="post" id="search-form" name="search" enctype="multipart/form-data">
+                <div class="row center">
+                    <input type="file" class="dropify" name="file">
+                </div>
+                <div class="row center">
+                    <a class="waves-effect waves-light btn search-btn"><i class="material-icons left">search</i>Q&Aを検索する</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="progress-wrap">
+        <div class="center-align">
+            <div id="progress-container"></div>
+            <span class="progress-ps" style="font-size: 24px;">0</span><span>%</span>
+            <p class="progress-message" style="font-size: 18px;">画像データを解析中...</p>
+        </div>
+    </div>
+      <!-- Modal Structure -->
+    <div id="modal1" class="modal">
+        <div class="modal-content">
+            <h3>画像の解析が完了しました！</h3>
+            <img id="item-img" src="#" />
+            <div id="analyze-result">
+                <div><label>判定結果：</label><span class="class-name"></span></div>
+                <div><label>一致度：</label><span class="score"></span></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div class="row center">
+                <a class="waves-effect waves-light btn search-btn" id="modal-button"><i class="material-icons left">search</i>対象商品のQ&Aを見る</a>
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"
+        integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+    <script src="./js/socket.io.js"></script>
+    <script src="https://rawgit.com/kimmobrunfeldt/progressbar.js/master/dist/progressbar.min.js"></script>
+    <script>
+        $(function () {
+            $('.dropify').dropify();
+
+            // modalを開く
+            $('.modal').modal();
+
+            var bar = new ProgressBar.Line('#progress-container', {
+                strokeWidth: 4,
+                easing: 'easeInOut',
+                duration: 1300,
+                color: '#03a9f4',
+                trailColor: '#eee',
+                trailWidth: 1,
+                svgStyle: {width: '100%', height: '100%'}
+            });
+
+            var socket = io();
+            socket.on('progress', function(percentage){
+                const container = $('#progress-container').find('path').eq(1)
+                $('.progress-ps').text(100 - percentage)
+                container.css('stroke-dashoffset', percentage)
+            });
+
+            socket.on('result', function(result){
+
+                const isBiore = result.class == 'biore' || result.class == 'birore2'
+                const isKyuKyutto = result.class == 'kyukyuto' || result.class == 'kyukyuto2'
+                const itemName = isBiore ? 'ビオレ' : (isKyuKyutto ? 'キュキュット' : '')
+
+                $('#analyze-result').show()
+                $('#analyze-result').find('.class-name').text(itemName)
+                $('#analyze-result').find('.score').text((result.score * 100) + '%')
+                $('#item-img').attr('src', '/uploads/' + result.filename)
+
+                const container = $('#progress-container').find('path').eq(1)
+                container.css('stroke-dashoffset', 0)
+                $('.progress-ps').text(100)
+                $('.progress-message').text('画像データの解析が完了しました！')
+
+                $('.modal').modal('open');
+
+                if (isBiore) {
+                    $('#modal-button').attr('href', "https://www.kao.com/jp/qa/biore.html")
+                } else if (isKyuKyutto) {
+                    $('#modal-button').attr('href', "https://www.kao.com/jp/qa/kyukyutto.html")
+                }
+            });
+
+            $('.search-btn').on('click', function() {
+                $('#search-form').submit()
+            });
+
+            $('#search-form').submit(function() {
+                $('#progress-wrap').css('display', 'flex')
+                $('#progress-container').find('path').eq(1).css('transition', '0.5s')
+            })
+        });
+        
+    </script>
+    <script src="./vender/dropify/dist/js/dropify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-beta/js/materialize.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@0.19.0/dist/axios.min.js"></script>
+</body>
+
+</html>
